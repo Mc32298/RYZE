@@ -16,7 +16,7 @@ In a world where browsers are bloated and privacy is an afterthought, Spinop Mai
 ### 🚀 Key Features
 - **Zero Account Required:** No "Spinop Account" needed. Your data never leaves your machine.
 - **Dynamic Inbox Management:** Add and remove Gmail, Outlook, iCloud, or Hotmail accounts with a single click.
-- **Biometric Ready:** Full native support for **Windows Hello**, **TouchID**, and **1Password** for instant, passwordless logins.
+- **Biometric Ready:** Full native support for **Windows Hello**, **TouchID**, and **1Password** for instant, passwordless logins.(UNDER DEV)
 - **Home Base Protection:** Smart logout detection snaps you back to the login screen if you accidentally wander off to a generic landing page.
 
 ---
