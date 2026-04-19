@@ -1,5 +1,11 @@
-const { app, BrowserWindow, WebContentsView, session, shell, ipcMain, Menu, MenuItem, safeStorage } = require('electron'); //// 1. GPU FIX (Keep this at the top)
+const { app, BrowserWindow, WebContentsView, session, shell, ipcMain, Menu, MenuItem, safeStorage } = require('electron');
+
+// --- 1. PERFORMANCE & GPU OPTIMIZATIONS ---
+// Lowers baseline memory usage and CPU load
 app.disableHardwareAcceleration(); 
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512'); 
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('enable-web-authentication');
 
 const path = require('path');
 const fs = require('fs');
@@ -21,25 +27,18 @@ function writeConfig(data) {
     const encryptedBuffer = safeStorage.encryptString(jsonString);
     fs.writeFileSync(configPath, encryptedBuffer);
   } else {
-    // Fallback for systems where encryption isn't supported
     fs.writeFileSync(configPath, jsonString);
   }
 }
 
-/**
- * Reads and decrypts data from the accounts file.
- */
 function readConfig() {
   if (!fs.existsSync(configPath)) return null;
-
   const buffer = fs.readFileSync(configPath);
   try {
-    // Attempt to decrypt the data
     const decrypted = safeStorage.decryptString(buffer);
     return JSON.parse(decrypted);
   } catch (error) {
     try {
-      // Fallback: Attempt to read as plain text for migration
       return JSON.parse(buffer.toString());
     } catch (e) {
       console.error('Failed to read config:', e);
@@ -54,7 +53,7 @@ function getAccounts() {
     const initial = [
       { id: 'gmail-default', type: 'gmail', ...SERVICE_MAP['gmail'] },
       { id: 'outlook-default', type: 'outlook', ...SERVICE_MAP['outlook'] }
-    ]; //
+    ];
     writeConfig(initial);
     return initial;
   }
@@ -69,18 +68,18 @@ function saveAccount(serviceType, customName) {
     name: customName,
     url: SERVICE_MAP[serviceType].url, 
     icon: SERVICE_MAP[serviceType].icon 
-  }; //
-  accounts.push(newAcc); //
+  };
+  accounts.push(newAcc);
   writeConfig(accounts);
   return newAcc;
 }
+
 // --- 3. SECURITY WHITE-LIST ---
 function isSafeUrl(urlString) {
   try {
     const parsedUrl = new URL(urlString);
     if (parsedUrl.protocol !== 'https:') return false;
     const host = parsedUrl.hostname;
-
     return (
       host === 'google.com' || host.endsWith('.google.com') ||
       host === 'gstatic.com' || host.endsWith('.gstatic.com') ||
@@ -101,8 +100,7 @@ function isSafeUrl(urlString) {
   }
 }
 
-// --- 4. GLOBAL PASSKEY / 1PASSWORD FIX ---
-app.commandLine.appendSwitch('enable-web-authentication'); //
+// --- 4. SESSION & AUTHENTICATION ---
 app.on('session-created', (ses) => {
   if (ses.setWebAuthnHandler) {
     ses.setWebAuthnHandler((details, callback) => {
@@ -113,10 +111,10 @@ app.on('session-created', (ses) => {
       }
     });
   }
-}); //
+});
 
-let mainWindow; //
-let views = {}; //
+let mainWindow;
+let views = {};
 
 function updateViewBounds() {
   if (!mainWindow) return;
@@ -124,10 +122,10 @@ function updateViewBounds() {
   Object.values(views).forEach(v => {
     v.setBounds({ x: 100, y: 0, width: b.width - 100, height: b.height });
   });
-} //
+}
 
 function createWindow() {
-  let state = windowStateKeeper({ defaultWidth: 1200, defaultHeight: 800 }); //
+  let state = windowStateKeeper({ defaultWidth: 1200, defaultHeight: 800 });
   mainWindow = new BrowserWindow({
     x: state.x, y: state.y, width: state.width, height: state.height,
     frame: false, backgroundColor: '#1c1c1e',
@@ -135,26 +133,47 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       sandbox: true,
-      contextIsolation: true // Ensured security setting
+      contextIsolation: true
     }
-  }); //
-  state.manage(mainWindow); //
-  mainWindow.on('resize', updateViewBounds); //
+  });
+
+  state.manage(mainWindow);
+  mainWindow.on('resize', updateViewBounds);
 
   const accounts = getAccounts();
   accounts.forEach(acc => createMailView(acc));
 
-  mainWindow.loadFile(path.join(__dirname, '../renderer/pages/index.html')); //
+  mainWindow.loadFile(path.join(__dirname, '../renderer/pages/index.html'));
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.send('init-accounts', accounts);
-  }); //
-}
+  });
 
+  // --- MEMORY SAVER ---
+  mainWindow.on('minimize', () => {
+    Object.values(views).forEach(v => {
+      if (v.webContents) {
+        v.webContents.setBackgroundThrottling(true);
+        v.webContents.setAudioMuted(true);
+      }
+    });
+  });
+
+  mainWindow.on('restore', () => {
+    Object.values(views).forEach(v => {
+      if (v.webContents) {
+        v.webContents.setBackgroundThrottling(false);
+        v.webContents.setAudioMuted(false);
+      }
+    });
+  });
+
+  mainWindow.on('closed', () => { mainWindow = null; });
+}
 
 function createMailView(acc) {
   const v = new WebContentsView({
     webPreferences: { 
-      preload: path.join(__dirname, '../preload/mail-preload.js'), // ✅ src/preload/mail-preload.js
+      preload: path.join(__dirname, '../preload/mail-preload.js'),
       sandbox: true, 
       enableWebAuthn: true,
       contextIsolation: true,
@@ -225,14 +244,13 @@ ipcMain.on('show-context-menu', (event, { id, name }) => {
         const renameWin = new BrowserWindow({
           width: 450, height: 360, parent: mainWindow, modal: true,
           frame: false, transparent: true, backgroundColor: '#00000000',
-          hasShadow: false,
           webPreferences: {
             preload: path.join(__dirname, '../preload/preload.js'),
             contextIsolation: true,
             sandbox: true 
-          } // ✅
+          }
         });
-        renameWin.loadFile(path.join(__dirname, '../renderer/pages/rename.html'), { // ✅
+        renameWin.loadFile(path.join(__dirname, '../renderer/pages/rename.html'), {
           query: { id: id, name: name }
         });
       }
@@ -249,9 +267,9 @@ ipcMain.on('show-context-menu', (event, { id, name }) => {
             preload: path.join(__dirname, '../preload/preload.js'),
             contextIsolation: true,
             sandbox: true 
-          } // ✅
+          }
         });
-        deleteWin.loadFile(path.join(__dirname, '../renderer/pages/delete.html'), { // ✅
+        deleteWin.loadFile(path.join(__dirname, '../renderer/pages/delete.html'), {
           query: { id: id, name: name }
         });
       }
@@ -277,10 +295,9 @@ ipcMain.on('open-add-window', (event, isTutorial = false) => {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       sandbox: true
-    } // ✅
-
+    }
   });
-  addWin.loadFile(path.join(__dirname, '../renderer/pages/add.html'), { // ✅
+  addWin.loadFile(path.join(__dirname, '../renderer/pages/add.html'), {
     query: { tutorial: String(isTutorial) }
   });
 });
@@ -294,9 +311,9 @@ ipcMain.on('open-delete-window', (event, { id, name }) => {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       sandbox: true 
-    } // ✅
+    }
   });
-  deleteWin.loadFile(path.join(__dirname, '../renderer/pages/delete.html'), { // ✅
+  deleteWin.loadFile(path.join(__dirname, '../renderer/pages/delete.html'), {
     query: { id: id, name: name }
   });
 });
@@ -322,6 +339,21 @@ ipcMain.on('add-service', (e, data) => {
 
 ipcMain.on('close-app', () => app.quit());
 ipcMain.on('minimize-app', () => mainWindow.minimize());
-ipcMain.on('maximize-app', () => mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
+ipcMain.on('maximize-app', () => {
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+});
 
+// --- 6. APP LIFECYCLE ---
 app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});

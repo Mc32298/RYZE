@@ -1,18 +1,29 @@
 {
-  "name": "spinopmailapp",
+  "name": "RYZE",
   "version": "1.0.0",
   "description": "The Private Inbox Command Center",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mc32298/RYZE.git"
+  },
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --windows" 
   },
-  "author": "Your Name",
+  "author": "Mathias N",
   "license": "ISC",
   "build": {
-    "appId": "com.spinop.mail",
-    "productName": "Spinop Mail",
-    "copyright": "Copyright © 2024",
+    "publish": [
+    {
+      "provider": "github",
+      "owner": "mc32298",
+      "repo": "RYZE"
+    }
+  ],
+    "appId": "com.ryze.mail",
+    "productName": "RYZE",
+    "copyright": "Copyright © 2026",
     "directories": {
       "output": "dist"
     },
