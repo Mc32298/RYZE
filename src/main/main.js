@@ -1,15 +1,13 @@
 const { app, BrowserWindow, WebContentsView, session, shell, ipcMain, Menu, MenuItem, safeStorage } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const windowStateKeeper = require('electron-window-state');
 
 // --- 1. PERFORMANCE & GPU OPTIMIZATIONS ---
-// Lowers baseline memory usage and CPU load
 app.disableHardwareAcceleration(); 
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512'); 
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('enable-web-authentication');
-
-const path = require('path');
-const fs = require('fs');
-const windowStateKeeper = require('electron-window-state');
 
 // --- 2. CONFIGURATION & STORAGE ---
 const userDataPath = app.getPath('userData');
@@ -49,7 +47,7 @@ function readConfig() {
 
 function getAccounts() {
   const accounts = readConfig();
-  if (!accounts) {
+  if (!accounts || !Array.isArray(accounts)) { // SECURITY FIX: Ensure accounts is always an array
     const initial = [
       { id: 'gmail-default', type: 'gmail', ...SERVICE_MAP['gmail'] },
       { id: 'outlook-default', type: 'outlook', ...SERVICE_MAP['outlook'] }
@@ -61,11 +59,18 @@ function getAccounts() {
 }
 
 function saveAccount(serviceType, customName) {
+  // SECURITY FIX: Validate that the service type exists in our map to prevent crashes or object injection
+  if (!SERVICE_MAP.hasOwnProperty(serviceType)) {
+    throw new Error(`Invalid service type: ${serviceType}`);
+  }
+  // SECURITY FIX: Limit customName length to prevent Storage DoS
+  const safeName = typeof customName === 'string' ? customName.substring(0, 50) : SERVICE_MAP[serviceType].name;
+
   const accounts = getAccounts();
   const newAcc = { 
     id: `${serviceType}-${Date.now()}`, 
     type: serviceType, 
-    name: customName,
+    name: safeName,
     url: SERVICE_MAP[serviceType].url, 
     icon: SERVICE_MAP[serviceType].icon 
   };
@@ -80,6 +85,7 @@ function isSafeUrl(urlString) {
     const parsedUrl = new URL(urlString);
     if (parsedUrl.protocol !== 'https:') return false;
     const host = parsedUrl.hostname;
+    // SECURITY FIX: The domain checks here are solid because .endsWith('.domain.com') ensures it's a subdomain.
     return (
       host === 'google.com' || host.endsWith('.google.com') ||
       host === 'gstatic.com' || host.endsWith('.gstatic.com') ||
@@ -100,6 +106,15 @@ function isSafeUrl(urlString) {
   }
 }
 
+// SECURITY FIX: Helper to verify IPC messages are only from trusted local files
+function isTrustedSender(sender) {
+  try {
+    return sender.getURL().startsWith('file://');
+  } catch (e) {
+    return false;
+  }
+}
+
 // --- 4. SESSION & AUTHENTICATION ---
 app.on('session-created', (ses) => {
   if (ses.setWebAuthnHandler) {
@@ -111,6 +126,17 @@ app.on('session-created', (ses) => {
       }
     });
   }
+
+  // SECURITY FIX: Restrict web permissions to prevent rogue pages from accessing cameras, mics, or location without intent.
+  ses.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowedPermissions = ['notifications']; // Only allow notifications for email clients
+    if (allowedPermissions.includes(permission)) {
+      callback(true);
+    } else {
+      console.warn(`Denied permission request: ${permission}`);
+      callback(false);
+    }
+  });
 });
 
 let mainWindow;
@@ -133,7 +159,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       sandbox: true,
-      contextIsolation: true
+      contextIsolation: true,
+      nodeIntegration: false // SECURITY FIX: Explicitly ensuring Node integration is false
     }
   });
 
@@ -177,6 +204,7 @@ function createMailView(acc) {
       sandbox: true, 
       enableWebAuthn: true,
       contextIsolation: true,
+      nodeIntegration: false, // SECURITY FIX: Explicitly false
       partition: `persist:${acc.id}` 
     }
   });
@@ -210,10 +238,31 @@ function createMailView(acc) {
   v.webContents.on('will-navigate', (event, url) => {
     if (!isSafeUrl(url)) {
       event.preventDefault();
-      shell.openExternal(url);
+      // SECURITY FIX: Enforce safe protocols before opening external sites
+      try {
+        const parsedURL = new URL(url);
+        if (['http:', 'https:', 'mailto:'].includes(parsedURL.protocol)) {
+          shell.openExternal(url);
+        }
+      } catch (e) {
+        console.error('Invalid URL during navigation');
+      }
     } else {
       checkLogout(url);
     }
+  });
+
+  // SECURITY FIX: New Window restriction. Prevents mail providers from freely spawning uncontrollable popups.
+  v.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsedURL = new URL(url);
+      if (['http:', 'https:', 'mailto:'].includes(parsedURL.protocol)) {
+        shell.openExternal(url);
+      }
+    } catch (e) {
+      console.error('Invalid popup URL');
+    }
+    return { action: 'deny' }; 
   });
 
   v.webContents.on('did-navigate', (event, url) => checkLogout(url));
@@ -227,16 +276,22 @@ function createMailView(acc) {
 
 // --- 5. IPC HANDLERS ---
 ipcMain.on('update-account-name', (event, { id, newName }) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Ensure request is from local file
+  if (typeof id !== 'string' || typeof newName !== 'string') return;
+  const safeName = newName.substring(0, 50);
+
   const accounts = getAccounts();
   const index = accounts.findIndex(acc => acc.id === id);
   if (index !== -1) {
-    accounts[index].name = newName;
+    accounts[index].name = safeName;
     writeConfig(accounts);
-    mainWindow.webContents.send('account-updated', { id, newName });
+    mainWindow.webContents.send('account-updated', { id, newName: safeName });
   }
 });
 
 ipcMain.on('show-context-menu', (event, { id, name }) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  if (typeof id !== 'string' || typeof name !== 'string') return;
   const template = [
     {
       label: 'Rename Inbox',
@@ -247,7 +302,8 @@ ipcMain.on('show-context-menu', (event, { id, name }) => {
           webPreferences: {
             preload: path.join(__dirname, '../preload/preload.js'),
             contextIsolation: true,
-            sandbox: true 
+            sandbox: true,
+            nodeIntegration: false
           }
         });
         renameWin.loadFile(path.join(__dirname, '../renderer/pages/rename.html'), {
@@ -266,7 +322,8 @@ ipcMain.on('show-context-menu', (event, { id, name }) => {
           webPreferences: { 
             preload: path.join(__dirname, '../preload/preload.js'),
             contextIsolation: true,
-            sandbox: true 
+            sandbox: true,
+            nodeIntegration: false
           }
         });
         deleteWin.loadFile(path.join(__dirname, '../renderer/pages/delete.html'), {
@@ -279,22 +336,37 @@ ipcMain.on('show-context-menu', (event, { id, name }) => {
   menu.popup(BrowserWindow.fromWebContents(event.sender));
 });
 
-ipcMain.on('open-external', (event, url) => {
-  shell.openExternal(url);
+ipcMain.on('open-external', (event, urlString) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  if (typeof urlString !== 'string') return;
+  try {
+    const parsedUrl = new URL(urlString);
+    if (['http:', 'https:', 'mailto:'].includes(parsedUrl.protocol)) {
+      shell.openExternal(urlString);
+    } else {
+      console.warn(`Blocked attempt to open unsafe protocol: ${parsedUrl.protocol}`);
+    }
+  } catch (e) {
+    console.error('Invalid URL passed to open-external');
+  }
 });
 
-ipcMain.on('load-mail', (e, id) => {
+ipcMain.on('load-mail', (event, id) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  if (typeof id !== 'string') return;
   Object.keys(views).forEach(vId => views[vId].setVisible(vId === id));
 });
 
 ipcMain.on('open-add-window', (event, isTutorial = false) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
   const addWin = new BrowserWindow({
     width: 450, height: 500, parent: mainWindow, modal: true, 
     frame: false, transparent: true, backgroundColor: '#00000000',
     webPreferences: { 
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
-      sandbox: true
+      sandbox: true,
+      nodeIntegration: false
     }
   });
   addWin.loadFile(path.join(__dirname, '../renderer/pages/add.html'), {
@@ -303,6 +375,8 @@ ipcMain.on('open-add-window', (event, isTutorial = false) => {
 });
 
 ipcMain.on('open-delete-window', (event, { id, name }) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  if (typeof id !== 'string' || typeof name !== 'string') return;
   const deleteWin = new BrowserWindow({
     width: 450, height: 360, parent: mainWindow, modal: true,
     frame: false, resizable: false, transparent: true,
@@ -310,7 +384,8 @@ ipcMain.on('open-delete-window', (event, { id, name }) => {
     webPreferences: { 
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
-      sandbox: true 
+      sandbox: true, 
+      nodeIntegration: false
     }
   });
   deleteWin.loadFile(path.join(__dirname, '../renderer/pages/delete.html'), {
@@ -319,6 +394,8 @@ ipcMain.on('open-delete-window', (event, { id, name }) => {
 });
 
 ipcMain.on('delete-account', (event, id) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  if (typeof id !== 'string') return;
   const accounts = getAccounts();
   const updatedAccounts = accounts.filter(acc => acc.id !== id);
   writeConfig(updatedAccounts);
@@ -330,24 +407,37 @@ ipcMain.on('delete-account', (event, id) => {
   mainWindow.webContents.send('account-deleted', id);
 });
 
-ipcMain.on('add-service', (e, data) => {
+ipcMain.on('add-service', (event, data) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  if (!data || typeof data !== 'object') return;
   const { type, name } = data;
-  const acc = saveAccount(type, name);
-  createMailView(acc);
-  mainWindow.webContents.send('new-account', acc);
-});
-
-ipcMain.on('close-app', () => app.quit());
-ipcMain.on('minimize-app', () => mainWindow.minimize());
-ipcMain.on('maximize-app', () => {
-  if (mainWindow.isMaximized()) {
-    mainWindow.unmaximize();
-  } else {
-    mainWindow.maximize();
+  try {
+    const acc = saveAccount(type, name);
+    createMailView(acc);
+    mainWindow.webContents.send('new-account', acc);
+  } catch (error) {
+    console.error('Failed to add service:', error.message);
   }
 });
 
-// --- 6. APP LIFECYCLE ---
+ipcMain.on('close-app', (event) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  app.quit();
+});
+ipcMain.on('minimize-app', (event) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  mainWindow?.minimize();
+});
+ipcMain.on('maximize-app', (event) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow?.maximize();
+  }
+});
+
+// --- 6. APP LIFECYCLE & GLOBAL SECURITY RESTRICTIONS ---
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
@@ -356,4 +446,17 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+// SECURITY FIX: Global event listeners to catch and prevent unauthorized webviews/windows
+app.on('web-contents-created', (event, contents) => {
+  // Prevent <webview> tag creation globally
+  contents.on('will-attach-webview', (event) => {
+    event.preventDefault();
+  });
+
+  // Global window open fallback to deny all popups that somehow bypass the specific handlers
+  contents.setWindowOpenHandler(({ url }) => {
+    return { action: 'deny' };
+  });
 });
