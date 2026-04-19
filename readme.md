@@ -1,7 +1,7 @@
 # 📬 RYZE Mail App
 **The Private Inbox Command Center.**
 
-Spinop Mail is a lightweight, Electron-based desktop application designed to bridge the gap between webmail and native performance. No accounts, no cloud tracking, and no bloat. Just your email, exactly where you need it.
+RYZE is a lightweight, Electron-based desktop application designed to bridge the gap between webmail and native performance. No accounts, no cloud tracking, and no bloat. Just your email, exactly where you need it.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Open Source Love](https://badges.frapsoft.com/os/v1/open-source.svg?v=103)](https://github.com/ellerbrock/open-source-badges/)
