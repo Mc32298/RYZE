@@ -1,26 +1,26 @@
 {
   "name": "RYZE",
-  "version": "1.0.0",
+  "version": "1.1.4",
   "description": "The Private Inbox Command Center",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mc32298/RYZE.git"
+    "url": "https://github.com/Mc32298/RYZE.git"
   },
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --windows" 
+    "dist": "electron-builder --windows"
   },
   "author": "Mathias N",
   "license": "ISC",
   "build": {
     "publish": [
-    {
-      "provider": "github",
-      "owner": "mc32298",
-      "repo": "RYZE"
-    }
-  ],
+      {
+        "provider": "github",
+        "owner": "Mc32298",
+        "repo": "RYZE"
+      }
+    ],
     "appId": "com.ryze.mail",
     "productName": "RYZE",
     "copyright": "Copyright © 2026",
@@ -50,6 +50,7 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "electron-window-state": "^5.0.3"
   }
 }

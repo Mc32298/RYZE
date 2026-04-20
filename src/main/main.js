@@ -2,6 +2,7 @@ const { app, BrowserWindow, WebContentsView, session, shell, ipcMain, Menu, Menu
 const path = require('path');
 const fs = require('fs');
 const windowStateKeeper = require('electron-window-state');
+const { autoUpdater } = require('electron-updater');
 
 // --- 1. PERFORMANCE & GPU OPTIMIZATIONS ---
 app.disableHardwareAcceleration(); 
@@ -440,7 +441,17 @@ ipcMain.on('maximize-app', (event) => {
 });
 
 // --- 6. APP LIFECYCLE & GLOBAL SECURITY RESTRICTIONS ---
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  
+  // Check for updates silently in the background
+  autoUpdater.checkForUpdatesAndNotify();
+});
+
+autoUpdater.on('update-downloaded', () => {
+  // Automatically install the update and restart the app when downloaded
+  autoUpdater.quitAndInstall();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
