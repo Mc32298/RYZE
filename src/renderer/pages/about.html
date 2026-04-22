@@ -68,6 +68,18 @@
       window.mailAPI.checkForUpdates();
     });
 
+    // Handle Errors
+    window.mailAPI.onUpdateError((errMsg) => {
+      console.error(errMsg); // Logs the exact error to the console
+      updateBtn.innerText = 'Check Failed';
+      
+      // Reset the button after 3 seconds so they can try again
+      setTimeout(() => {
+        updateBtn.innerText = 'Check for Updates';
+        updateBtn.disabled = false;
+      }, 3000);
+    });
+
     // Reset button if no updates are found
     window.mailAPI.onUpdateNotAvailable(() => {
       updateBtn.innerText = 'App is up to date!';

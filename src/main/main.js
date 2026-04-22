@@ -542,6 +542,10 @@ autoUpdater.on('update-not-available', (info) => {
 
 autoUpdater.on('error', (err) => {
   console.error('AutoUpdater Error:', err.message || err);
+  if (aboutWin) {
+    // Send the error to the About window so it stops loading
+    aboutWin.webContents.send('update-error', err.message || 'Update check failed');
+  }
 });
 
 app.on('window-all-closed', () => {

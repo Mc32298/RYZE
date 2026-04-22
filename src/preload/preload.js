@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('mailAPI', {
   openAboutWindow: () => ipcRenderer.send('open-about-window'),
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
   onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', cb),
+  onUpdateError: (cb) => ipcRenderer.on('update-error', (e, errMsg) => cb(errMsg)),
   
   closeApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
