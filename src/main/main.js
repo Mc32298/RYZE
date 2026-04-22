@@ -430,12 +430,14 @@ ipcMain.on('add-service', (event, data) => {
 
 ipcMain.on('update-response', (event, action) => {
   if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  
   if (action === 'download') {
     autoUpdater.downloadUpdate().catch(err => {
       console.error('Update download failed:', err.message);
     });
   } else if (action === 'restart') {
-    autoUpdater.quitAndInstall();
+    // Arguments: isSilent (true), isForceRunAfter (true)
+    autoUpdater.quitAndInstall(true, true);
   }
 });
 
