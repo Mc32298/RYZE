@@ -167,3 +167,8 @@ document.querySelector('.maximize').addEventListener('click', () => window.mailA
 document.getElementById('btn-feedback').addEventListener('click', () => {
   window.mailAPI.openExternal('https://github.com/Mc32298/Spinophowto');
 });
+
+// About button
+document.getElementById('btn-about').addEventListener('click', () => {
+  window.mailAPI.openAboutWindow();
+});

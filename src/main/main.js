@@ -283,6 +283,35 @@ function createMailView(acc) {
 }
 
 // --- 5. IPC HANDLERS ---
+let aboutWin = null; // Add this outside the handler
+
+ipcMain.on('open-about-window', (event) => {
+  if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Validate sender
+  
+  const aboutWin = new BrowserWindow({
+    width: 350, height: 320, parent: mainWindow, modal: true,
+    frame: false, resizable: false, transparent: true,
+    backgroundColor: '#00000000',
+    webPreferences: { 
+      preload: path.join(__dirname, '../preload/preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false
+    }
+  });
+  
+  // Pass the actual app version as a query parameter
+  aboutWin.loadFile(path.join(__dirname, '../renderer/pages/about.html'), {
+    query: { version: app.getVersion() }
+  });
+  aboutWin.on('closed', () => { aboutWin = null; }); //
+});
+
+ipcMain.on('check-for-updates', (event) => {
+  if (!isTrustedSender(event.sender)) return;
+  autoUpdater.checkForUpdates();
+});
+
 ipcMain.on('update-account-name', (event, { id, newName }) => {
   if (!isTrustedSender(event.sender)) return; // SECURITY FIX: Ensure request is from local file
   if (typeof id !== 'string' || typeof newName !== 'string') return;
@@ -506,6 +535,9 @@ autoUpdater.on('checking-for-update', () => {
 
 autoUpdater.on('update-not-available', (info) => {
   console.log('No updates found. App is up to date.');
+  if (aboutWin) {
+    aboutWin.webContents.send('update-not-available');
+  }
 });
 
 autoUpdater.on('error', (err) => {

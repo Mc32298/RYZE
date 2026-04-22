@@ -181,7 +181,7 @@ a:link {
   color: white;
 }
 
-#btn-feedback {
+#btn-feedback, #btn-about {
   margin-top: 0;
   margin-bottom: 20px;
   background-color: transparent;
@@ -190,14 +190,15 @@ a:link {
   height: 50px;
 }
 
-#btn-feedback:hover {
+#btn-feedback:hover, #btn-about:hover {
   color: #0A84FF;
   background-color: rgba(10, 132, 255, 0.1);
 }
 
-#btn-feedback .material-symbols-outlined {
+#btn-feedback .material-symbols-outlined, #btn-about .material-symbols-outlined {
   font-size: 20px !important;
 }
+
 
 /* --- Button Label --- */
 

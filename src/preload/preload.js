@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('mailAPI', {
   showContextMenu: (data) => ipcRenderer.send('show-context-menu', data),
   updateAccountName: (data) => ipcRenderer.send('update-account-name', data),
   onAccountUpdated: (cb) => ipcRenderer.on('account-updated', (e, data) => cb(data)),
+  openAboutWindow: () => ipcRenderer.send('open-about-window'),
+  checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', cb),
   
   closeApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
