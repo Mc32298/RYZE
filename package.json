@@ -1,6 +1,6 @@
 {
   "name": "RYZE",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "The Private Inbox Command Center",
   "repository": {
     "type": "git",
@@ -40,10 +40,11 @@
       "node_modules/**/*"
     ],
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
-    }
+    "oneClick": true,
+    "perMachine": false,
+    "allowElevation": true,
+    "allowToChangeInstallationDirectory": false
+  }
   },
   "devDependencies": {
     "electron": "^30.0.0",
